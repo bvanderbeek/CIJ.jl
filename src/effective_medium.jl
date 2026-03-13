@@ -47,80 +47,85 @@ function pitl(d1, vp1, vs1, rho1, d2, vp2, vs2, rho2)
 end
 
 """
-    tandon_and_weng(vp, vs, rho, del, c, vpi, vsi, rhoi) -> C, rho
+    tandon_and_weng(vp, vs, ρ, α, c, vpᵢ, vsᵢ, ρᵢ) -> C, ρ
 
-Return the effective elastic constants `C` and density `rho` of a medium with matrix
-velocities `vp` and `vs` (m/s) and density `rho` (kg/m^3), and inclusion
-velocities `vpi` and `vsi`, density `rhoi`.  The symmetry axis is parallel to x1.
+Return the effective elastic constants `C` and density `ρ` of a medium with matrix
+velocities `vp` and `vs` (m/s) and density `ρ` (kg/m^3), and inclusion
+velocities `vpᵢ` and `vsᵢ`, density `ρᵢ`.  The symmetry axis is parallel to x1.
 
-`del` is the aspect ration of spheroidal inclusions: <1 oblate, >1 prolate
+`α` is the aspect ration of spheroidal inclusions: <1 oblate, >1 prolate
 
 `c` is the volume fraction of inclusions (0 <= c <= 1).
 """
-function tandon_and_weng(vp, vs, rho, del, c, vpi, vsi, rhoi)
-    #This implementation is based on the Fortran code by Mike Kendall
-    del > 0 || error("CIJ.tandon_and_weng: `del` must be > 0.")
-    del == 1 && error("CIJ.tandon_and_weng: Theory not valid for `del == 1`")
+function tandon_and_weng(vp, vs, ρ, α, c, vpᵢ, vsᵢ, ρᵢ)
+    # This implementation is based on the Fortran code by Mike Kendall
+    α > 0 || error("CIJ.tandon_and_weng: `α` must be > 0.")
+    α == 1 && error("CIJ.tandon_and_weng: Theory not valid for `α == 1`")
     0 <= c <= 1 || error("CIJ.tandon_and_weng: `c` must be in range 0 - 1")
-    vp == vpi && vs == vsi && rho == rhoi && return CIJ.iso(vp=vp, vs=vs), rho
+    vp == vpᵢ && vs == vsᵢ && ρ == ρᵢ && return CIJ.iso(vp=vp, vs=vs), ρ
 
     C = zero(EC)
-    #  weighted average density
-    rho_out = (1 - c)*rho + c*rhoi
 
-    amu  = vs^2*rho
-    amui = vsi^2*rhoi
-    alam = vp^2*rho - 2*amu
-    alami = vpi^2*rhoi - 2*amui
-    bmi = alami + amui*2/3
-    bmps = alam + amu
-    #  Young's modulus for matrix
-    E0 = amu*(3*alam + 2*amu)/(alam + amu)
-    #  Poisson's ratio of the matrix.
-    anu = alam/(2*(alam + amu))
+    # Weighted average density
+    ρ_out = (1 - c)*ρ + c*ρᵢ
 
-    #  Some time saving terms
-    t1 = del^2 - 1
-    t2 = 1 - anu
-    t3 = 1 - 2*anu
-    t4 = 3 * del^2
-    t5 = 1 - del^2
+    # Lamé parameters
+    # Avoid integer problems by explicit conversion to float
+    μ₀ = float(vs)^2*ρ
+    μᵢ = float(vsᵢ)^2*ρᵢ
+    λ₀ = float(vp)^2*ρ - 2μ₀
+    λᵢ = float(vpᵢ)^2*ρᵢ - 2μᵢ
+    Kᵢ = λᵢ + μᵢ*2/3
+    # Plane-strain bulk modulus
+    K̅₀ = λ₀ + μ₀ # TW below (36)
+    # Young's modulus for matrix
+    E0 = μ₀*(3λ₀ + 2μ₀)/(λ₀ + μ₀)
+    # Poisson's ratio of the matrix
+    ν₀ = λ₀/(2*(λ₀ + μ₀))
+
+    # Some time saving terms
+    t1 = α^2 - 1
+    t2 = 1 - ν₀
+    t3 = 1 - 2ν₀
+    t4 = 3α^2
+    t5 = 1 - α^2
 
     # D1, D2 and D3 from Tandon and Weng (1984) (just before equation (18)).
-    D1 = 1 + 2*(amui - amu)/(alami - alam)
-    D2 = (alam + 2*amu)/(alami - alam)
-    D3 = alam/(alami - alam)
+    D1 = 1 + 2*(μᵢ - μ₀)/(λᵢ - λ₀)
+    D2 = (λ₀ + 2μ₀)/(λᵢ - λ₀)
+    D3 = λ₀/(λᵢ - λ₀)
 
     # g and g' terms (appendix of Tandon and Weng 1984). g is for prolate spheroidal
-    # inclusions (del>1), whilst g' is for disc-like (oblate) inclusions (del<1).
-    if (del >= 1)
-        acshdel = log(del + sqrt(t1))
-        g = (del*sqrt(t1) - acshdel)*del/sqrt(t1^3)
+    # inclusions (α>1), whilst g' is for disc-like (oblate) inclusions (α<1).
+    if (α >= 1)
+        acshα = log(α + sqrt(t1))
+        g = α/sqrt(t1^3)*(α*sqrt(t1) - acshα)
+        g = α/sqrt(t1^3)*(α*sqrt(t1) - acosh(α))
     else
         # g' below
-        g = (acos(del) - del*sqrt(t5))*del/sqrt(t5^3) ;
+        g = α/sqrt(t5^3)*(acos(α) - α*sqrt(t5))
     end
 
     # Eshelby's Sijkl tensor (appendix of Tandon and Weng 1984).
-    s11 = (t3 + (t4-1)/t1 - (t3 + t4/t1)*g)/(2*t2)
+    s11 = (t3 + (t4 - 1)/t1 - (t3 + t4/t1)*g)/(2*t2)
     s22 = (t4/(t1*2) + (t3 - 9/(4*t1))*g)/(4*t2)
     s33 = s22
-    s23 = (del^2/(2*t1) - (t3 + 3/(4*t1))*g)/(4*t2)
+    s23 = (α^2/(2*t1) - (t3 + 3/(4*t1))*g)/(4*t2)
     s32 = s23
-    s21 = (-2*del*del/t1 + (t4/t1 - t3)*g)/(4*t2)
+    s21 = (-2*α^2/t1 + (t4/t1 - t3)*g)/(4*t2)
     s31 = s21
     s12 = (-(t3 + 1/t1) + (t3 + 3/(2*t1))*g)/(2*t2)
     s13 = s12
-    s44 = (del*del/(2*t1) + (t3 - 3/(4*t1))*g)/(4*t2)
-    s66 = (t3 - (t1+2)/t1 - (t3 - 3*(t1+2)/t1)*g/2)/(4*t2)
+    s44 = (α^2/(2*t1) + (t3 - 3/(4*t1))*g)/(4*t2)
+    s66 = (t3 - (t1+2)/t1 - (t3 - 3*(t1 + 2)/t1)*g/2)/(4*t2)
     s55 = s66
 
     # Tandon and Weng's B terms (after equation 17).
-    B1 = c*D1 + D2 + (1-c)*(D1*s11 + 2*s21)
-    B2 = c + D3 + (1-c)*(D1*s12 + s22 + s23)
-    B3 = c + D3 + (1-c)*(s11 + (1+D1)*s21)
-    B4 = c*D1 + D2 + (1-c)*(s12 + D1*s22 + s23)
-    B5 = c + D3 + (1-c)*(s12 + s22 + D1*s23)
+    B1 = c*D1 + D2 + (1 - c)*(D1*s11 + 2*s21)
+    B2 = c + D3 + (1 - c)*(D1*s12 + s22 + s23)
+    B3 = c + D3 + (1 - c)*(s11 + (1+D1)*s21)
+    B4 = c*D1 + D2 + (1 - c)*(s12 + D1*s22 + s23)
+    B5 = c + D3 + (1 - c)*(s12 + s22 + D1*s23)
 
     # Tandon and Weng's A terms (after equation 20).
     A1 = D1*(B4 + B5) - 2*B2
@@ -128,43 +133,38 @@ function tandon_and_weng(vp, vs, rho, del, c, vpi, vsi, rhoi)
     A3 = B1 - D1*B3
     A4 = (1 + D1)*B1 - 2*B3
     A5 = (1 - D1)/(B4 - B5)
-    A = 2*B2*B3 - B1*(B4+B5)
+    A = 2*B2*B3 - B1*(B4 + B5)
 
     # Tandon and Weng (1984) equations (25) (28) (31) (32)
-    E11 = E0/(1+c*(A1+2*anu*A2)/A)
-    E22 = E0/(1+c*(-2*anu*A3 + (1-anu)*A4 + (1+anu)*A5*A)/(2*A))
-    amu12 = amu*(1 + c/(amu/(amui-amu) + 2*(1-c)*s66))
-    amu23 = amu*(1 + c/(amu/(amui-amu) + 2*(1-c)*s44))
+    E11 = E0/(1 + c*(A1 + 2ν₀*A2)/A)
+    E22 = E0/(1 + c*(-2*ν₀*A3 + (1 - ν₀)*A4 + (1 + ν₀)*A5*A)/(2*A))
+    μ₁₂ = μ₀*(1 + c/(μ₀/(μᵢ - μ₀) + 2*(1 - c)*s66))
+    μ₂₃ = μ₀*(1 + c/(μ₀/(μᵢ - μ₀) + 2*(1 - c)*s44))
 
     # Sayers equation (36)
-    anu31 = anu - c*(anu*(A1+2*anu*A2)+(A3-anu*A4)) / (A + c*(A1+2*anu*A2))
+    ν₃₁ = ν₀ - c*(ν₀*(A1 + 2*ν₀*A2)+(A3 - ν₀*A4))/(A + c*(A1 + 2*ν₀*A2))
 
     # T&W equation (36)
-    #     aK12 term; bmps=plane strain bulk modulus
-    anum = (1 + anu)*(1 - 2*anu)
-    denom = 1 - anu*(1+2*anu31) + c*(2*(anu31-anu)*A3 + (1-anu*(1+2*anu31))*A4)/A
-    aK23 = bmps*anum/denom
-    anu12tst = E11/E22 - (1/amu23 + 1/aK23)*E11/4
+    num = (1 + ν₀)*(1 - 2ν₀)
+    denom = 1 - ν₀*(1 + 2ν₃₁) + c*(2*(ν₃₁ - ν₀)*A3 + (1 - ν₀*(1 + 2ν₃₁))*A4)/A
+    K₂₃ = K̅₀*num/denom
+    ν₁₂² = E11/E22 - (1/μ₂₃ + 1/K₂₃)*E11/4
 
     # Cij - Sayers' (1992) equations (24)-(29).
     # Conversion
-    C[2,2] = amu23 + aK23
+    C[1,1] = E11 + 4*ν₁₂²*K₂₃
+    C[2,2] = μ₂₃ + K₂₃
     C[3,3] = C[2,2]
-    C[1,1] = E11 + 4*anu12tst*aK23
-    C[2,3] = -amu23 + aK23
-    C[1,2] = 2*anu31*aK23
-    C[1,3] = C[1,2]
-    C[5,5] = amu12
-    C[6,6] = C[5,5]
+    C[1,2] = C[2,1] = 2*ν₃₁*K₂₃
+    C[1,3] = C[3,1] = C[1,2]
+    C[2,3] = C[3,2] = -μ₂₃ + K₂₃
     C[4,4] = (C[2,2] - C[2,3])/2
+    C[5,5] = C[6,6] = μ₁₂
 
-    # Fill out matrix by symmetry
-    CIJ.symm!(C)
-
-    # apply density normalisation
-    C ./= rho_out
+    # Apply density normalisation
+    C = EC(C./ρ_out)
     
-    C, rho_out
+    C, ρ_out
 end
 
 """
