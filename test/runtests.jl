@@ -4,6 +4,7 @@ using Test
     include("types.jl")
     include("synthesis.jl")
     include("properties.jl")
+    include("effective_medium.jl")
     include("conversion.jl")
     include("velocities.jl")
     include("io.jl")
