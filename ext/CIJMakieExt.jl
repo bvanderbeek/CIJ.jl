@@ -62,6 +62,7 @@ you can pass a different argument to the `units` keyword argument.
     from infinite distance.
   - `:lambert`: Lambert equal-area azimuthal projection.
   - `:polar`: Polar projection (i.e., no transformation from a normal polar axis).
+  - `:stereographic`: Stereographic (equal-angle) projection.
 - `resize = true`: Resize the figure before returning to fit the plot.
 - `spacing = 2.5`: Spacing in ° for the grid sampling the hemisphere.
 - `ticks = (color=:black, markersize=20, strokecolor=:black, strokewidth=1)`:
@@ -258,6 +259,9 @@ function _hemisphere_coords(azis, incs; projection=:lambert)
         # Avoid point perfectly at the pole (radius 0) which causes
         # plotting problems
         rs = max.((90 .- incs)./90, 1e-7)
+    elseif projection === :stereographic
+        θs = deg2rad.(azis)
+        rs = cotd.((90 .+ incs)./2)
     else
         throw(ArgumentError("unsupported projection '$projection'"))
     end
