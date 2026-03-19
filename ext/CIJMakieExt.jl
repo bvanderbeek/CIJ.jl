@@ -61,6 +61,7 @@ you can pass a different argument to the `units` keyword argument.
   - `:infinity`: Azimuthal projection at infinity; i.e., as if viewing a sphere
     from infinite distance.
   - `:lambert`: Lambert equal-area azimuthal projection.
+  - `:polar`: Polar projection (i.e., no transformation from a normal polar axis).
 - `resize = true`: Resize the figure before returning to fit the plot.
 - `spacing = 2.5`: Spacing in ° for the grid sampling the hemisphere.
 - `ticks = (color=:black, markersize=20, strokecolor=:black, strokewidth=1)`:
@@ -243,15 +244,20 @@ the CIJ convention.  (See [`CIJ.phase_vels`](@ref).)
 `projection` defines the convention used.
 """
 function _hemisphere_coords(azis, incs; projection=:lambert)
-    if projection == :lambert
+    if projection === :lambert
         θs = deg2rad.(azis)
         # Maximum radius is √2, so we need to divide by √2 to get rs in the
         # range [0, 1].  The formula has a 2 in front, so the prefactor becomes
         # 2/√2 = √2
         rs = √2 .* sind.((90 .- incs)./2)
-    elseif projection == :infinity
+    elseif projection === :infinity
         θs = deg2rad.(azis)
         rs = sind.(90 .- incs)
+    elseif projection === :polar
+        θs = deg2rad.(azis)
+        # Avoid point perfectly at the pole (radius 0) which causes
+        # plotting problems
+        rs = max.((90 .- incs)./90, 1e-7)
     else
         throw(ArgumentError("unsupported projection '$projection'"))
     end
